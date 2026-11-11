@@ -1,0 +1,110 @@
+name: Deploy PacEdu Workspace Preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/deploy-workspace-preview.yml"
+      - "README.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pacedu-workspace-preview-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout preview repository
+        uses: actions/checkout@v4
+
+      - name: Checkout exact PR #363 staging commit
+        uses: actions/checkout@v4
+        with:
+          repository: terubea82-eng/Pacific-education-
+          ref: 0ae92070456c60d27b491e6387d35ff9da38ddcf
+          path: source
+          persist-credentials: false
+
+      - name: Assemble isolated workspace preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -a source/src _site/src
+          cp -a source/js _site/js
+          cp -a source/icons _site/icons
+          cp source/manifest.webmanifest _site/manifest.webmanifest
+          touch _site/.nojekyll
+
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta name="robots" content="noindex,nofollow">
+            <meta http-equiv="refresh" content="0;url=./src/index.html">
+            <title>PacEdu Workspace Preview</title>
+          </head>
+          <body>
+            <p>Opening the separate PacEdu workspace preview…</p>
+            <p><a href="./src/index.html">Continue to PacEdu</a></p>
+          </body>
+          </html>
+          HTML
+
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("_site")
+          index = root / "src/index.html"
+          html = index.read_text()
+          html = html.replace(
+              "https://terubea82-eng.github.io/Pacific-education-/",
+              "https://terubea82-eng.github.io/Pacific-education-pilot-preview-1/"
+          )
+          html = html.replace(
+              "https://terubea82-eng.github.io/Pacific-education-/src/index.html",
+              "https://terubea82-eng.github.io/Pacific-education-pilot-preview-1/src/index.html"
+          )
+          html = html.replace(
+              'serviceWorker.register("../service-worker.js"',
+              'serviceWorker.register("./service-worker.js"'
+          )
+          index.write_text(html)
+
+          manifest = root / "manifest.webmanifest"
+          data = manifest.read_text().replace(
+              "/Pacific-education-/",
+              "/Pacific-education-pilot-preview-1/"
+          )
+          manifest.write_text(data)
+          PY
+
+          test -f _site/src/index.html
+          test -f _site/src/js/paceduTeacherTwoResourceWorkspace.js
+          test -f _site/src/js/pacificEducationTeacherDailyOnlyWorkspace.js
+          test -f _site/src/js/pacificEducationTeacherQuickManualAnswer.js
+          test -f _site/js/pacificEducationCore.js
+          echo "PASS: workspace preview assembled from pinned PR #363 commit."
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload workspace preview
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy workspace preview only
+        id: deployment
+        uses: actions/deploy-pages@v4
