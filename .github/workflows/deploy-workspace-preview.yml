@@ -44,6 +44,7 @@ jobs:
           cp -a source/js _site/js
           cp -a source/icons _site/icons
           cp source/manifest.webmanifest _site/manifest.webmanifest
+          cp source/service-worker.js _site/service-worker.js
           touch _site/.nojekyll
 
           cat > _site/index.html <<'HTML'
@@ -76,10 +77,6 @@ jobs:
               "https://terubea82-eng.github.io/Pacific-education-/src/index.html",
               "https://terubea82-eng.github.io/Pacific-education-pilot-preview-1/src/index.html"
           )
-          html = html.replace(
-              'serviceWorker.register("../service-worker.js"',
-              'serviceWorker.register("./service-worker.js"'
-          )
           index.write_text(html)
 
           manifest = root / "manifest.webmanifest"
@@ -88,14 +85,25 @@ jobs:
               "/Pacific-education-pilot-preview-1/"
           )
           manifest.write_text(data)
+
+          service_worker = root / "service-worker.js"
+          worker = service_worker.read_text().replace(
+              "/Pacific-education-/",
+              "/Pacific-education-pilot-preview-1/"
+          )
+          service_worker.write_text(worker)
           PY
 
+          test -f _site/index.html
           test -f _site/src/index.html
+          test -f _site/service-worker.js
           test -f _site/src/js/paceduTeacherTwoResourceWorkspace.js
           test -f _site/src/js/pacificEducationTeacherDailyOnlyWorkspace.js
           test -f _site/src/js/pacificEducationTeacherQuickManualAnswer.js
           test -f _site/js/pacificEducationCore.js
-          echo "PASS: workspace preview assembled from pinned PR #363 commit."
+          grep -q 'serviceWorker.register("../service-worker.js"' _site/src/index.html
+          grep -q '/Pacific-education-pilot-preview-1/src/index.html' _site/service-worker.js
+          echo "PASS: workspace preview and service worker assembled from pinned PR #363 commit."
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
